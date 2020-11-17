@@ -26,10 +26,11 @@ type Document struct {
 }
 
 type Admin struct {
-	ObjectType string `json:"Type"`
-	AdminID    string `json:"adminID"`
-	Username   string `json:"username"`
-	Password   string `json:"password"`
+	ObjectType string   `json:"Type"`
+	AdminID    string   `json:"adminID"`
+	Username   string   `json:"username"`
+	Password   string   `json:"password"`
+	Message    []string `json:"message"`
 }
 
 func (t *SmartContract) Init(stub shim.ChaincodeStubInterface) peer.Response {
@@ -57,6 +58,9 @@ func (t *SmartContract) Invoke(stub shim.ChaincodeStubInterface) peer.Response {
 	}
 	if function == "queryAdmin" {
 		return t.queryAdmin(stub, args)
+	}
+	if function == "updateAdmin" {
+		return t.updateAdmin(stub, args)
 	}
 
 	fmt.Println("Invoke did not find specified function " + function)
@@ -157,7 +161,7 @@ func (t *SmartContract) addAdmin(stub shim.ChaincodeStubInterface, args []string
 
 	var err error
 
-	if len(args) != 3 {
+	if len(args) != 4 {
 		return shim.Error("Incorrect Number of Aruments. Expecting 3")
 	}
 
@@ -173,11 +177,14 @@ func (t *SmartContract) addAdmin(stub shim.ChaincodeStubInterface, args []string
 	if len(args[2]) <= 0 {
 		return shim.Error("3rd Argument Must be a Non-Empty String")
 	}
+	if len(args[3]) <= 0 {
+		return shim.Error("4rd Argument Must be a Non-Empty String")
+	}
 
 	adminID := args[0]
 	username := args[1]
 	password := args[2]
-
+	message := args[3]
 	// ======Check if admin Already exists
 
 	adminAsBytes, err := stub.GetState(adminID)
@@ -190,7 +197,7 @@ func (t *SmartContract) addAdmin(stub shim.ChaincodeStubInterface, args []string
 	// ===== Create admin Object and Marshal to JSON
 
 	objectType := "admin"
-	admin := &Admin{objectType, adminID, username, password}
+	admin := &Admin{objectType, adminID, username, password, append(Admin{}.Message, message)}
 	adminJSONasBytes, err := json.Marshal(admin)
 
 	if err != nil {
@@ -207,6 +214,40 @@ func (t *SmartContract) addAdmin(stub shim.ChaincodeStubInterface, args []string
 	// ======= Return Success
 
 	fmt.Println("Successfully Saved admin")
+	return shim.Success(nil)
+}
+
+func (t *SmartContract) updateAdmin(stub shim.ChaincodeStubInterface, args []string) peer.Response {
+
+	if len(args) < 2 {
+		return shim.Error("Incorrect number of arguments. Expecting 2")
+	}
+
+	adminID := args[0]
+	newMessage := args[1]
+	fmt.Println("- start  ", adminID, newMessage)
+
+	responseAsBytes, err := stub.GetState(adminID)
+	if err != nil {
+		return shim.Error("Failed to get status:" + err.Error())
+	} else if responseAsBytes == nil {
+		return shim.Error("response does not exist")
+	}
+
+	responseToUpdate := Admin{}
+	err = json.Unmarshal(responseAsBytes, &responseToUpdate) //unmarshal it aka JSON.parse()
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+	responseToUpdate.Message = append(responseToUpdate.Message, newMessage) //change the status
+
+	responseJSONasBytes, _ := json.Marshal(responseToUpdate)
+	err = stub.PutState(adminID, responseJSONasBytes) //rewrite
+	if err != nil {
+		return shim.Error(err.Error())
+	}
+
+	fmt.Println("- end  (success)")
 	return shim.Success(nil)
 }
 
